@@ -5,31 +5,34 @@
 # 	          Open the GitLinks.txt file, copy all git links into it.\n
 #	          Save and close the file, then run Git_Cloner.sh.\n
 
+#Recording session
+asciinema rec Git_Mngr-$(date +%c).cast
+
 #Setting path to working directory
 GITPATHTEMP=($(ls -d */ | sort | uniq))
 ORGPATH=$(pwd)
-
-#Grabbing file name from the user
-GitLinks=$1
-if [ $GitLinks != "$(ls $PWD | grep $GitLinks)" ]; then
-    echo "$GitLinks does not exist, please enter a valid filename"
-    echo "if a file is not specified, default is GitLinks.txt"
-    echo usage 'Git_Mngr.sh GitLinks.txt'
-    exit
-elif [ -z $GitLinks ]; then
-    targets=$PWD/GitLinks.txt
-fi
 
 #Updating existing git repos
 function GitUpdate()
 {
     for pths in ${GITPATHTEMP[*]}; do
         cd $ORGPATH/$pths
-        echo "----------------------------------------------------------"
-        echo "You are updating this Git repo:"
-        echo $pths
-        echo "----------------------------------------------------------"
-        git pull
+        CurGitPrj=($(git remote -v | cut -d ":" -f 2 | cut -d " " -f 1))
+        PrjSiteStatus=$(curl -o /dev/null -k --silent --get --write-out "%{http_code} https:$CurGitPrj\n" "https:$CurGitPrj" | cut -d " " -f 1)
+        PrjDiskStatus=$(echo https:$CurGitPrj | cut -d "/" -f 5)
+        if [ "$PrjSiteStatus" != "404" ] && [ "$PrjDiskStatus" != "$(ls | grep -o "$PrjDiskStatus")" ]; then
+            echo "----------------------------------------------------------"
+            echo "You are updating this Git repo:"
+            echo $pths
+            echo "----------------------------------------------------------"
+            git pull
+        elif [ "$PrjSiteStatus" == "404" ]; then
+            echo "$(date +%c): The project $PrjDiskStatus (link: https:$CurGitPrj) is no longer exists or has been moved" | tee -a $ORGPATH/Git_Mngr.log
+        elif [ "$PrjDiskStatus" == "$(ls | grep -o "$PrjDiskStatus")" ]; then
+            echo "$(date +%c): You have already downloaded the project $PrjDiskStatus before" | tee -a $ORGPATH/Git_Mngr.log
+        else
+            echo "$(date +%c): If you are reading this, when cloning $PrjDiskStatus (link: https:$CurGitPrj), something want EPICLY WRONG.." | tee -a $ORGPATH/Git_Mngr.log
+        fi
         cd ..
     done
 }
@@ -41,12 +44,20 @@ function GitLinks()
     # echo  "What is the name of the file with all the git links (Default: GitLinks.txt)?"
     # read GitLinks
 
-    if [ -z $GitLinks ]; then
-        GitLinks="GitLinks.txt"
+    #Grabbing file name from the user
+    GitLinks=$1
+    if [ $GitLinks != "$(ls $PWD | grep $GitLinks)" ]; then
+        echo "$GitLinks does not exist, please enter a valid filename"
+        echo "if a file is not specified, default is GitLinks.txt"
+        echo usage 'Git_Mngr.sh GitLinks.txt'
+        pause
+        GitLinks
+    elif [ -z $GitLinks ]; then
+        GitLinks=$PWD/GitLinks.txt
     fi
 
     for links in $(cat $ORGPATH/$GitLinks);do
-        PrjSiteStatus=$(curl -o /dev/null --silent --get --write-out "%{http_code} $links\n" "$links" | cut -d " " -f 1)
+        PrjSiteStatus=$(curl -o /dev/null -k --silent --get --write-out "%{http_code} $links\n" "$links" | cut -d " " -f 1)
         PrjDiskStatus=$(echo $links | cut -d "/" -f 5)
         if [ "$PrjSiteStatus" != "404" ] && [ "$PrjDiskStatus" != "$(ls | grep -o "$PrjDiskStatus")" ]; then
             echo "----------------------------------------------------------"
@@ -55,11 +66,11 @@ function GitLinks()
             echo "----------------------------------------------------------"
             git clone $links
         elif [ "$PrjSiteStatus" == "404" ]; then
-            echo "$(date +%c): Thhe project $PrjDiskStatus no longer exists or has been moved" | tee -a $ORGPATH/Git_Mngr.log
+            echo "$(date +%c): The project $PrjDiskStatus (link: $links) is no longer exists or has been moved" | tee -a $ORGPATH/Git_Mngr.log
         elif [ "$PrjDiskStatus" == "$(ls | grep -o "$PrjDiskStatus")" ]; then
             echo "$(date +%c): You have already downloaded the project $PrjDiskStatus before" | tee -a $ORGPATH/Git_Mngr.log
         else
-            echo "$(date +%c): If you are reading this, something want EPICLY WRONG.." | tee -a $ORGPATH/Git_Mngr.log
+            echo "$(date +%c): If you are reading this, when cloning $PrjDiskStatus (link: $links), something want EPICLY WRONG.." | tee -a $ORGPATH/Git_Mngr.log
         fi
     done
 }
