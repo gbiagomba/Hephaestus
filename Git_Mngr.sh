@@ -16,23 +16,6 @@ ORGPATH=$(pwd)
 # Updating existing git repos
 function GitUpdate()
 {
-    # declaring variable
-    declare -i MAX=$(expr ${#GITPATHTEMP[@]} - 1)
-
-    # Setting  parallel stack
-    if [ "$MAX" -gt "1" ] && [ "$MAX" -lt "10" ]; then
-        declare -i POffset=$MAX
-    elif [ "$MAX" -gt "10" ] || [ "$MAX" -lt "0" ]; then
-        echo "How many nmap processess do you want to run?"
-        echo "Default: 5, Max: 10, Min: 1"
-        read POffset
-
-        if [ "$POffset" -gt "10" ] || [ "$POffset" -lt 1 ] || [ -z "$POffset" ]; then
-            echo "Incorrect value, setting offset to default"
-            declare -i POffset=5
-        fi
-    fi
-
     for pths in ${GITPATHTEMP[*]}; do
         cd $ORGPATH/$pths
         CurGitPrj=($(git remote -v | cut -d ":" -f 2 | cut -d " " -f 1))
@@ -44,14 +27,7 @@ function GitUpdate()
             echo "You are updating this Git repo:"
             echo $pths
             echo "----------------------------------------------------------"
-            declare -i MIN=$POffset
-            for i in $(seq 0 $MAX); do
-                gnome-terminal --tab -q -- git pull
-                if (( $i == $MIN )); then 
-                    let "MIN+=$POffset"
-                    while pgrep -x git > /dev/null; do sleep 10; done
-                fi
-            done
+            git pull | tee -a $ORGPATH/Git_Mngr.log
         elif [ "$PrjSiteStatus" == "404" ]; then
             echo "$(date +%c): The project $PrjDiskStatus (link: https:$CurGitPrj) is no longer exists or has been moved" | tee -a $ORGPATH/Git_Mngr.log
         elif [ "$PrjDiskStatus" == "$(ls | grep -o "$PrjDiskStatus")" ]; then
@@ -82,23 +58,6 @@ function GitLinks()
         GitLinks=$PWD/GitLinks.txt
     fi
 
-    # declaring variable
-    declare -i MAX=$(expr ${#GitLinks[@]} - 1)
-
-    # Setting  parallel stack
-    if [ "$MAX" -gt "1" ] && [ "$MAX" -lt "10" ]; then
-        declare -i POffset=$MAX
-    elif [ "$MAX" -gt "10" ] || [ "$MAX" -lt "0" ]; then
-        echo "How many nmap processess do you want to run?"
-        echo "Default: 5, Max: 10, Min: 1"
-        read POffset
-
-        if [ "$POffset" -gt "10" ] || [ "$POffset" -lt 1 ] || [ -z "$POffset" ]; then
-            echo "Incorrect value, setting offset to default"
-            declare -i POffset=5
-        fi
-    fi
-
     for links in $(cat $ORGPATH/$GitLinks);do
         PrjSiteStatus=$(curl -o /dev/null -k --silent --get --write-out "%{http_code} $links\n" "$links" | cut -d " " -f 1)
         PrjDiskStatus=$(echo $links | cut -d "/" -f 5)
@@ -107,14 +66,7 @@ function GitLinks()
             echo "You are downloading this Git repo:"
             echo $links
             echo "----------------------------------------------------------"
-            declare -i MIN=$POffset
-            for i in $(seq 0 $MAX); do
-                gnome-terminal --tab -q -- git clone $links
-                if (( $i == $MIN )); then 
-                    let "MIN+=$POffset"
-                    while pgrep -x git > /dev/null; do sleep 10; done
-                fi
-            done            
+            git clone $links       
         elif [ "$PrjSiteStatus" == "404" ]; then
             echo "$(date +%c): The project $PrjDiskStatus (link: $links) is no longer exists or has been moved" | tee -a $ORGPATH/Git_Mngr.log
         elif [ "$PrjDiskStatus" == "$(ls | grep -o "$PrjDiskStatus")" ]; then
