@@ -16,8 +16,8 @@ ORGPATH=$(pwd)
 # Updating existing git repos
 function GitUpdate()
 {
-    for pths in ${GITPATHTEMP[*]}; do
-        cd $ORGPATH/$pths
+    for repo in ${GITPATHTEMP[*]}; do
+        cd $ORGPATH/$repo
         CurGitPrj=($(git remote -v | cut -d ":" -f 2 | cut -d " " -f 1))
         PrjSiteStatus=$(curl -o /dev/null -k --silent --get --write-out "%{http_code} https:$CurGitPrj\n" "https:$CurGitPrj" | cut -d " " -f 1)
         PrjDiskStatus=$(echo https:$CurGitPrj | cut -d "/" -f 5)      
@@ -25,7 +25,7 @@ function GitUpdate()
         if [ "$PrjSiteStatus" != "404" ] && [ "$PrjDiskStatus" != "$(ls | grep -o "$PrjDiskStatus")" ]; then
             echo "----------------------------------------------------------"
             echo "You are updating this Git repo:"
-            echo $pths
+            echo $repo
             echo "----------------------------------------------------------"
             git pull | tee -a $ORGPATH/Git_Mngr.log
         elif [ "$PrjSiteStatus" == "404" ]; then
@@ -91,7 +91,7 @@ function destructor()
     unset GITPATHTEMP
     unset links
     unset ORGPATH
-    unset pths
+    unset repo
     unset PrjSiteStatus
     set -u
 }
