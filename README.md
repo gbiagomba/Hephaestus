@@ -21,6 +21,7 @@ The above mentioned scripts, but dont take my word for it, go right ahead and pe
 
 ## Some Ascii art:
 SOme github mascot ascii art awesomeness!
+```
 +----------------------------------------------------------------------------------------------------+
 |oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo|
 |oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo|
@@ -73,5 +74,5 @@ SOme github mascot ascii art awesomeness!
 |oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo|
 |oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo|
 +----------------------------------------------------------------------------------------------------+
-
+```
 source: https://github.com/nodanaonlyzuul/asciiart
