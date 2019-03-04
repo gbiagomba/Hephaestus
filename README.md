@@ -10,3 +10,11 @@ Funny you ask!
 4. **GitHTMLParser.sh**: This script will go through an HTML file and pull out git repo links.
 5. **Git_Roleback.sh**: This script will force reset a git commit, good for troubleshooting merge collisions.
 6. **Git_UPdater.sh**: This script will update your existing repo, I wrote this purely out of laziness lol. 
+
+## WHats up with those git links files?
+Man if I did not know better you could read my mind!
+- **GitLinks.txt**: This is a full list of all the repos I have ever cloned in the last two (2) years.
+- **GitLinks-Active.txt**: This is the subset of repos I have cloned that I know are still alive.
+
+## Whats in the rsc/ and old/ file?
+The above mentioned scripts, but dont take my word for it, go right ahead and peek for yourself ;)
