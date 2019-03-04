@@ -19,8 +19,8 @@ Man if I did not know better you could read my mind!
 ## Whats in the rsc/ and old/ file?
 The above mentioned scripts, but dont take my word for it, go right ahead and peek for yourself ;)
 
-## Some Ascii art:
-SOme github mascot ascii art awesomeness!
+## Some Ascii Art:
+Some github mascot ascii art awesomeness!
 ```
 +----------------------------------------------------------------------------------------------------+
 |oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo|
