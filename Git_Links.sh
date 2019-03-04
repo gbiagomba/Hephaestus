@@ -1,3 +1,10 @@
+# !/bin/bash
+# Author: Gilles Biagomba
+# Program: Git_links.sh
+# Description: This script is a fork of Git_Mngr, it goes into every local repo directory\n
+#  	       and pulls the URL of the repo then send it to a file.\n
+# 	       Theo bjective was to find which ofthe repors  I use were still live/valide.\n
+
 GITPATHTEMP=($(ls -d */ | sort | uniq))
 for repo in ${GITPATHTEMP[*]}; do
     cd $PWD/$repo

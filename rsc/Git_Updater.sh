@@ -1,8 +1,8 @@
-#Author: Gilles Biagomba
-#Program: Git_Updater.sh
-#Description: This script was design to update my Git repo.\n
-#	      But you can obviously use it to push changes back\n
-#	      in your repo. You do not have anything below\n
+# Author: Gilles Biagomba
+# Program: Git_Updater.sh
+# Description: This script was design to update my Git repo for me.\n
+# 	       TBH I wrote this out of pure laziness, 
+#              and not wanting to have to enter the below commands everytime (^_^). \n
 
 git add *
 echo "Why are you updating your git profile?"
