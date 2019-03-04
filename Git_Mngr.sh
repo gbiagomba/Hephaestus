@@ -30,8 +30,6 @@ function GitUpdate()
             git pull | tee -a $ORGPATH/Git_Mngr.log
         elif [ "$PrjSiteStatus" == "404" ]; then
             echo "$(date +%c): The project $PrjDiskStatus (link: https:$CurGitPrj) is no longer exists or has been moved" | tee -a $ORGPATH/Git_Mngr.log
-        elif [ "$PrjDiskStatus" == "$(ls | grep -o "$PrjDiskStatus")" ]; then
-            echo "$(date +%c): You have already downloaded the project $PrjDiskStatus before" | tee -a $ORGPATH/Git_Mngr.log
         else
             echo "$(date +%c): If you are reading this, when cloning $PrjDiskStatus (link: https:$CurGitPrj), something want EPICLY WRONG.." | tee -a $ORGPATH/Git_Mngr.log
         fi
@@ -94,7 +92,17 @@ function destructor()
     unset repo
     unset PrjSiteStatus
     set -u
-}
+
+    echo "
+    ______       _       _                
+    | ___ \     | |     | |               
+    | |_/ /_   _| |__   | |__  _   _  ___ 
+    | ___ \ | | | |_ \  | |_ \| | | |/ _ \
+    | |_/ / |_| | | | | | |_) | |_| |  __/
+    \____/ \__/_|_| |_| |_.__/ \__/ |\___|
+                                __| |     
+                               |___/      "
+    }
 
 # User selection
 function UserSelect()
@@ -132,8 +140,8 @@ function UserSelect()
             ;;
         4)
             echo "Have a good day"
-            pause 'Press [Enter] key to exit...'
             destructor
+            pause 'Press [Enter] key to exit...'
             clear
             exit
             ;;
