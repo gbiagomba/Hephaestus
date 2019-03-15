@@ -18,7 +18,7 @@ function GitUpdate()
 {
     for repo in ${GITPATHTEMP[*]}; do
         cd $ORGPATH/$repo
-        CurGitPrj=($(git remote -v | cut -d ":" -f 2 | cut -d " " -f 1))
+        CurGitPrj=$(git remote -v | cut -d ":" -f 2 | cut -d " " -f 1 | sort | uniq)
         PrjSiteStatus=$(curl -o /dev/null -k --silent --get --write-out "%{http_code} https:$CurGitPrj\n" "https:$CurGitPrj" | cut -d " " -f 1)
         PrjDiskStatus=$(echo https:$CurGitPrj | cut -d "/" -f 5)      
 
@@ -27,6 +27,7 @@ function GitUpdate()
             echo "You are updating this Git repo:"
             echo $repo
             echo "----------------------------------------------------------"
+            git reset --hard
             git pull | tee -a $ORGPATH/Git_Mngr.log
         elif [ "$PrjSiteStatus" == "404" ]; then
             echo "$(date +%c): The project $PrjDiskStatus (link: https:$CurGitPrj) is no longer exists or has been moved" | tee -a $ORGPATH/Git_Mngr.log
