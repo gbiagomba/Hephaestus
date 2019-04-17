@@ -13,6 +13,9 @@
 GITPATHTEMP=($(ls -d */ | sort | uniq))
 ORGPATH=$(pwd)
 
+# Grabbing file name from the user
+GitLink=$1
+
 # Updating existing git repos
 function GitUpdate()
 {
@@ -45,9 +48,7 @@ function GitLinks()
     # echo  "What is the name of the file with all the git links (Default: GitLinks.txt)?"
     # read GitLinks
 
-    # Grabbing file name from the user
-    GitLink=$1
-    if [ "$GitLink" != "$(ls $PWD | grep $GitLink)" ]; then
+    if [ -r $GitLink ]; then
         echo "$GitLink does not exist, please enter a valid filename"
         echo "if a file is not specified, default is GitLinks.txt"
         echo usage 'Git_Mngr.sh GitLinks.txt'
@@ -56,6 +57,7 @@ function GitLinks()
     elif [ -z $GitLink ]; then
         GitLink=$PWD/GitLinks.txt
     fi
+
     for links in $(cat $GitLink);do
         PrjSiteStatus=$(curl -o /dev/null -k --silent --get --write-out "%{http_code} $links\n" "$links" | cut -d " " -f 1)
         PrjDiskStatus=$(echo $links | cut -d "/" -f 5)
