@@ -1,4 +1,4 @@
-# !/bin/bash
+#!/usr/bin/env bash
 # Author: Gilles Biagomba
 # Program: Git_Mngr.sh
 # Description: This script was design to update and/or clone multiple git repos.\n
@@ -35,8 +35,9 @@ function GitUpdate()
         elif [ "$PrjSiteStatus" == "404" ]; then
             echo "$(date +%c): The project $PrjDiskStatus (link: https:$CurGitPrj) is no longer exists or has been moved" | tee -a $ORGPATH/Git_Mngr.log
         else
-            echo "$(date +%c): If you are reading this, when cloning $PrjDiskStatus (link: https:$CurGitPrj), something want EPICLY WRONG.." | tee -a $ORGPATH/Git_Mngr.log
+            echo "$(date +%c): If you are reading this, when updating $PrjDiskStatus (link: https:$CurGitPrj), something want EPICLY WRONG.." | tee -a $ORGPATH/Git_Mngr.log
         fi
+        
         cd ..
     done
 }
@@ -48,7 +49,7 @@ function GitLinks()
     # echo  "What is the name of the file with all the git links (Default: GitLinks.txt)?"
     # read GitLinks
 
-    if [ -r $GitLink ]; then
+    if [ ! -r $GitLink ]; then
         echo "$GitLink does not exist, please enter a valid filename"
         echo "if a file is not specified, default is GitLinks.txt"
         echo usage 'Git_Mngr.sh GitLinks.txt'

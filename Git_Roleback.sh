@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 # Author: Gilles Biagomba
 # Program: Git_Updater.sh
 # Description: This script was design perform a hard reset on my git repo.\n

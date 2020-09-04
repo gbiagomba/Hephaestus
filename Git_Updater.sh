@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 # Author: Gilles Biagomba
 # Program: Git_Updater.sh
 # Description: This script was design to update my Git repo for me.\n
