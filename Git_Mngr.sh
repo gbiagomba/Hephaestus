@@ -25,7 +25,7 @@ function GitUpdate()
         PrjSiteStatus=$(curl -o /dev/null -k --silent --get --write-out "%{http_code} https:$CurGitPrj\n" "https:$CurGitPrj" | cut -d " " -f 1)
         PrjDiskStatus=$(echo https:$CurGitPrj | cut -d "/" -f 5)      
 
-        if [ "$PrjSiteStatus" != "404" ] && [ "$PrjDiskStatus" != "$(ls | grep -o "$PrjDiskStatus")" ]; then
+        if [ "$PrjSiteStatus" != "404" ] && [ "$PrjDiskStatus" != "$(ls | grep -o "$PrjDiskStatus")" ] && [ -d .git/ ]; then
             echo "----------------------------------------------------------"
             echo "You are updating this Git repo:"
             echo $repo
@@ -62,7 +62,7 @@ function GitLinks()
     for links in $(cat $GitLink);do
         PrjSiteStatus=$(curl -o /dev/null -k --silent --get --write-out "%{http_code} $links\n" "$links" | cut -d " " -f 1)
         PrjDiskStatus=$(echo $links | cut -d "/" -f 5)
-        if [ "$PrjSiteStatus" != "404" ] && [ "$PrjDiskStatus" != "$(ls | grep -o "$PrjDiskStatus")" ]; then
+        if [ "$PrjSiteStatus" != "404" ] && [ "$PrjDiskStatus" != "$(ls | grep -o "$PrjDiskStatus")" ] && [ -d .git/ ]; then
             echo "----------------------------------------------------------"
             echo "You are downloading this Git repo:"
             echo $links
