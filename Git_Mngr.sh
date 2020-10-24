@@ -10,7 +10,7 @@
 # script "Git_Mngr-$(date +%c).txt"
 
 # Setting path to working directory
-GITPATHTEMP=($(ls -d */ | sort | uniq))
+GITPATHTEMP=($(ls -d */ | sort -d | uniq))
 ORGPATH=$(pwd)
 
 # Grabbing file name from the user
