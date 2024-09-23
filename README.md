@@ -1,6 +1,7 @@
 ![alt tag](img/Firefly%20Create%20a%20striking%20logo%20featuring%20a%20blacksmith’s%20forge%20with%20glowing%20embers,%20an%20anvil,%20and%20a%20h.jpg)
 
 # Hephaestus (formerly Hephaestus)
+![GitHub](https://img.shields.io/github/license/Achiefs/fim) [![Tip Me via PayPal](https://img.shields.io/badge/PayPal-tip_me-green?logo=paypal)](paypal.me/gbiagomba)
 
 **Hephaestus** is a powerful, Rust-based command-line interface (CLI) tool designed for managing Git repositories and tasks. It provides various features for updating, parsing, and initializing Git repositories, drawing inspiration from the Greek god of craftsmanship, Hephaestus.
 
