@@ -1,71 +1,25 @@
-![alt tag](img/Firefly%20Create%20a%20striking%20logo%20featuring%20a%20blacksmith’s%20forge%20with%20glowing%20embers,%20an%20anvil,%20and%20a%20h.jpg)
+# Git_Tools
+A collection of git administration tools I wrote to help automate managing my git repos
 
-# Hephaestus - A Rust-based Git Management CLI Tool
-![GitHub](https://img.shields.io/github/license/Achiefs/fim) [![Tip Me via PayPal](https://img.shields.io/badge/PayPal-tip_me-green?logo=paypal)](paypal.me/gbiagomba)
+## What do they all do?
+Funny you ask!
 
-**Hephaestus** is a powerful, Rust-based command-line interface (CLI) tool designed for managing Git repositories and tasks. It provides various features for updating, parsing, and initializing Git repositories, drawing inspiration from the Greek god of craftsmanship, Hephaestus.
+1. **Git_Mngr.sh**: This script will clone repos and update existing repos for you.
+2. **Git_Links.sh**: This script will go thru folders and tries to pull down the git repo link. 
+3. **GitCleaners.sh**: This script was something I made to clean up a mistake I made.
+4. **GitHTMLParser.sh**: This script will go through an HTML file and pull out git repo links.
+5. **Git_Roleback.sh**: This script will force reset a git commit, good for troubleshooting merge collisions.
+6. **Git_UPdater.sh**: This script will update your existing repo, I wrote this purely out of laziness lol. 
 
-## Features
+## WHats up with those git links files?
+Man if I did not know better you could read my mind!
+- **GitLinks.txt**: This is a full list of all the repos I have ever cloned in the last two (2) years.
+- **GitLinks-Active.txt**: This is the subset of repos I have cloned that I know are still alive.
 
-- **git-update**: Update your git repository.
-- **git-parse**: Parse Git-related HTML files.
-- **git-init**: Initialize a new Git repository.
-- **git-manage**: Manage Git tasks from the command line.
-- **git-rollback**: Roll back changes in your Git repository.
-
-## Installation
-
-First, make sure you have Rust installed. Then, clone the repository and build the project:
-
-```bash
-git clone https://github.com/yourusername/hephaestus.git
-cd hephaestus
-cargo build --release
-```
-
-## Usage
-
-Once installed, you can use Hephaestus via the following commands:
-
-```bash
-./hephaestus git-update --path /path/to/repo
-./hephaestus git-parse --input file.html
-./hephaestus git-init --name new-repo
-./hephaestus git-manage
-./hephaestus git-rollback
-```
-
-For more options, use the help flag:
-
-```bash
-./hephaestus --help
-```
-
-### **Dockerfile**
-1. **Build the Docker image**:
-   ```bash
-   docker build -t hephaestus .
-   ```
-
-2. **Run the Docker container**:
-   ```bash
-   docker run --rm hephaestus
-   ```
-
-   - This will display the help menu since we are running `hephaestus --help`.
-
-3. **Run a specific subcommand** (e.g., `git-update`):
-   ```bash
-   docker run --rm hephaestus git-update --path /path/to/repo
-   ```
-
-## License
-
-Hephaestus is licensed under the GPL-3.0 License.
-
+## Whats in the rsc/ and old/ file?
+The above mentioned scripts, but dont take my word for it, go right ahead and peek for yourself ;)
 
 ## Some Ascii Art:
-
 Some github mascot ascii art awesomeness!
 ```
 +----------------------------------------------------------------------------------------------------+

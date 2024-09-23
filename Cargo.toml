@@ -1,0 +1,9 @@
+[package]
+name = "hephaestus"
+version = "0.1.0"
+authors = ["gilles.infosec@gmail.com"]
+edition = "2021"
+license = "GPL-3.0"
+
+[dependencies]
+clap = { version = "4.0", features = ["derive"] }
