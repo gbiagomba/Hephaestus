@@ -24,13 +24,13 @@ git clone https://github.com/yourusername/hephaestus.git
 cd hephaestus
 make release
 ./target/release/hephaestus --help
+```
 
 Docker:
 
 ```bash
 docker build -t hephaestus:latest .
 docker run --rm hephaestus:latest --help
-```
 ```
 
 ## Usage
@@ -66,16 +66,15 @@ Security improvements:
 - No writes to privileged paths (e.g., `/opt`) without user choice
 - No global git config changes; only repository‑local changes
 - Destructive operations require an explicit `--yes`
+```
 
 ## CI
 
 GitHub Actions builds on Linux x64/arm64, macOS x64/arm64, and Windows x64. See `.github/workflows/ci.yml`.
-```
 
 ## License
 
 Hephaestus is licensed under the GPL-3.0 License.
-
 
 ## Some Ascii Art:
 
