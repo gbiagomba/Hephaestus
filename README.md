@@ -1,44 +1,75 @@
 ![alt tag](img/Firefly%20Create%20a%20striking%20logo%20featuring%20a%20blacksmith’s%20forge%20with%20glowing%20embers,%20an%20anvil,%20and%20a%20h.jpg)
 
-# Hephaestus (formerly Hephaestus)
+# Hephaestus
 ![GitHub](https://img.shields.io/github/license/Achiefs/fim) [![Tip Me via PayPal](https://img.shields.io/badge/PayPal-tip_me-green?logo=paypal)](paypal.me/gbiagomba)
 
-**Hephaestus** is a powerful, Rust-based command-line interface (CLI) tool designed for managing Git repositories and tasks. It provides various features for updating, parsing, and initializing Git repositories, drawing inspiration from the Greek god of craftsmanship, Hephaestus.
+Hephaestus is a secure, Rust-based CLI for everyday Git operations at scale. It replaces the legacy bash scripts in `legacy/` with safe, cross‑platform subcommands.
 
 ## Features
 
-- **git-update**: Update your git repository.
-- **git-parse**: Parse Git-related HTML files.
-- **git-init**: Initialize a new Git repository.
-- **git-manage**: Manage Git tasks from the command line.
-- **git-rollback**: Roll back changes in your Git repository.
+- update: Fast‑forward update a repo or all child repos
+- clone-links: Clone repositories from a newline‑separated links file
+- parse-html: Extract repo links from HTML into stdout or file
+- init: Initialize a repo with README and initial commit
+- status: Show `git status` for current repo
+- rollback: Confirmed, destructive reset to a ref (default `HEAD~1`)
+- commit-push: Stage all, commit with message, and push to upstream
 
-## Installation
+## Install / Build
 
-First, make sure you have Rust installed. Then, clone the repository and build the project:
+Prereq: Rust 1.72+.
 
 ```bash
 git clone https://github.com/yourusername/hephaestus.git
 cd hephaestus
-cargo build --release
+make release
+./target/release/hephaestus --help
+
+Docker:
+
+```bash
+docker build -t hephaestus:latest .
+docker run --rm hephaestus:latest --help
+```
 ```
 
 ## Usage
 
-Once installed, you can use Hephaestus via the following commands:
+Common usage:
 
 ```bash
-./hephaestus git-update --path /path/to/repo
-./hephaestus git-parse --input file.html
-./hephaestus git-init --name new-repo
-./hephaestus git-manage
-./hephaestus git-rollback
+hephaestus update --path /path/to/repo
+hephaestus update --all --path /path/with/many/repos
+hephaestus clone-links --links legacy/rsc/GitLinks-Active.txt --dest ./workspace
+hephaestus parse-html --input page.html --output links.txt
+hephaestus init --name new-repo --readme "# First commit"
+hephaestus status
+hephaestus rollback --to HEAD~1 --yes
+hephaestus commit-push --message "feat: update" --path .
 ```
 
 For more options, use the help flag:
 
 ```bash
-./hephaestus --help
+hephaestus --help
+
+## Legacy scripts mapping
+
+- legacy/Git_Mngr.sh → `update` and `clone-links`
+- legacy/GitHTMLParser.sh → `parse-html`
+- legacy/Git_Init.sh → `init`
+- legacy/Git_Roleback.sh → `rollback` (safer confirmation)
+- legacy/Git_Updater.sh → `commit-push`
+
+Security improvements:
+- No insecure curl calls; all network operations are via `git`
+- No writes to privileged paths (e.g., `/opt`) without user choice
+- No global git config changes; only repository‑local changes
+- Destructive operations require an explicit `--yes`
+
+## CI
+
+GitHub Actions builds on Linux x64/arm64, macOS x64/arm64, and Windows x64. See `.github/workflows/ci.yml`.
 ```
 
 ## License

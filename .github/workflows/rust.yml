@@ -1,4 +1,4 @@
-name: Rust CI
+name: Build Matrix
 
 on:
   push:
@@ -10,21 +10,58 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runs_on }}
+    continue-on-error: ${{ matrix.allow_failure || false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            runs_on: ubuntu-latest
+          - name: linux-arm64
+            runs_on: ubuntu-24.04-arm
+          - name: macos-x64
+            runs_on: macos-13
+          - name: macos-arm64
+            runs_on: macos-14
+          - name: windows-x64
+            runs_on: windows-latest
+          # Attempt cross-compile for Windows ARM64 (may lack toolchain)
+          - name: windows-arm64-cross
+            runs_on: windows-latest
+            target: aarch64-pc-windows-msvc
+            allow_failure: true
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Set up Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        profile: minimal
-        override: true
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
 
-    - name: Build the project
-      run: cargo build --release
+      - name: Add target (if cross-compiling)
+        if: ${{ matrix.target }}
+        run: rustup target add ${{ matrix.target }}
 
-    - name: Run tests
-      run: cargo test
+      - name: Build
+        run: |
+          if [ -n "${{ matrix.target }}" ]; then
+            cargo build --release --target ${{ matrix.target }}
+          else
+            cargo build --release
+          fi
+        shell: bash
+
+      - name: Test (native only)
+        if: ${{ !matrix.target }}
+        run: cargo test --all
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hephaestus-${{ matrix.name }}
+          path: |
+            target/**/release/hephaestus*

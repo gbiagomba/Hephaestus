@@ -1,0 +1,19 @@
+# Ignore build artifacts
+/target/
+
+# Ignore editor-specific files
+*.swp
+*.swo
+*.swn
+
+# Ignore IntelliJ IDEA files
+.idea/
+*.iml
+
+# Ignore VSCode settings
+.vscode/
+
+# Keep Cargo.lock for binary reproducibility
+
+# Ignore environment files
+.env

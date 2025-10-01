@@ -1,3 +1,14 @@
+⚠️ Deprecated: This directory contains legacy bash scripts that are now replaced by the Rust CLI in the repository root: `hephaestus`.
+
+Recommended replacements:
+- Git_Mngr.sh → `hephaestus update` (single/all repos) and `hephaestus clone-links`
+- GitHTMLParser.sh → `hephaestus parse-html`
+- Git_Init.sh → `hephaestus init`
+- Git_Roleback.sh → `hephaestus rollback` (requires `--yes` to confirm)
+- Git_Updater.sh → `hephaestus commit-push`
+
+Use `hephaestus --help` for full usage. The scripts below are kept for historical reference only and are not maintained.
+
 # Git_Tools
 A collection of git administration tools I wrote to help automate managing my git repos
 

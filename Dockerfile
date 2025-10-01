@@ -1,20 +1,17 @@
-# Use the official Rust image as the base image
-FROM rust:latest
+# Multi-stage build for a small final image
 
-# Set the working directory inside the container
-WORKDIR /usr/src/hephaestus
-
-# Copy the Cargo.toml and Cargo.lock files first
+FROM rust:1.80-slim AS build
+WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
-
-# This step will build only the dependencies (to leverage Docker layer caching)
+RUN mkdir -p src && echo "fn main(){}" > src/main.rs
 RUN cargo build --release || true
-
-# Now copy the source code
-COPY . .
-
-# Build the project in release mode
+COPY src ./src
 RUN cargo build --release
 
-# The final command to run the program
-CMD ["./target/release/hephaestus", "--help"]
+FROM debian:bookworm-slim AS runtime
+RUN useradd -m -u 10001 appuser
+WORKDIR /home/appuser
+COPY --from=build /app/target/release/hephaestus /usr/local/bin/hephaestus
+USER appuser
+ENTRYPOINT ["/usr/local/bin/hephaestus"]
+CMD ["--help"]
