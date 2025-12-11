@@ -15,9 +15,58 @@ Hephaestus is a secure, Rust-based CLI for everyday Git operations at scale. It 
 - rollback: Confirmed, destructive reset to a ref (default `HEAD~1`)
 - commit-push: Stage all, commit with message, and push to upstream
 
-## Install / Build
+## Installation
 
-Prereq: Rust 1.72+.
+### Quick Install (Recommended)
+
+**Linux / macOS / Unix:**
+```bash
+git clone https://github.com/yourusername/hephaestus.git
+cd hephaestus
+chmod +x install.sh
+./install.sh
+```
+
+**Windows (PowerShell as Administrator):**
+```powershell
+git clone https://github.com/yourusername/hephaestus.git
+cd hephaestus
+.\install.ps1
+```
+
+The install scripts will automatically:
+- Install Rust and git if not present
+- Install required build dependencies
+- Build Hephaestus from source
+- Install the binary to your PATH
+
+### Download Pre-built Binaries
+
+Download the latest release for your platform from the [Releases](https://github.com/yourusername/hephaestus/releases) page:
+
+- **Linux x64**: `hephaestus_linux-x64`
+- **Linux ARM64**: `hephaestus_linux-arm64`
+- **macOS Intel**: `hephaestus_macos-intel`
+- **macOS Apple Silicon**: `hephaestus_macos-arm`
+- **Windows x64**: `hephaestus_windows-x64.exe`
+- **Windows ARM64**: `hephaestus_windows-arm64.exe`
+
+**Installation steps:**
+```bash
+# Download the appropriate binary for your platform
+# Make it executable (Unix/macOS)
+chmod +x hephaestus_*
+
+# Move to PATH
+sudo mv hephaestus_* /usr/local/bin/hephaestus
+
+# Verify installation
+hephaestus --version
+```
+
+### Build from Source
+
+Prerequisites: Rust 1.72+
 
 ```bash
 git clone https://github.com/yourusername/hephaestus.git
@@ -26,11 +75,22 @@ make release
 ./target/release/hephaestus --help
 ```
 
-Docker:
+Or using cargo directly:
+```bash
+cargo install --path .
+```
+
+### Docker
 
 ```bash
 docker build -t hephaestus:latest .
 docker run --rm hephaestus:latest --help
+```
+
+Pull from registry (once published):
+```bash
+docker pull ghcr.io/yourusername/hephaestus:latest
+docker run --rm ghcr.io/yourusername/hephaestus:latest --help
 ```
 
 ## Usage

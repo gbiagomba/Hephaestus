@@ -7,7 +7,7 @@ use std::process::Command as SysCommand;
 
 fn main() {
     let matches = Command::new("Hephaestus")
-        .version("3.0.0")
+        .version("3.1.0")
         .author("Hephaestus Team <gilles.infosec@gmail.com>")
         .about("Secure, cross-platform git helper CLI")
         .subcommand(

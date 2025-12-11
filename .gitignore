@@ -17,3 +17,12 @@
 
 # Ignore environment files
 .env
+
+# Ignore test files
+test_repos.html
+test_output.html
+output.txt
+*.test.html
+*.test.txt
+test_*.html
+test_*.txt

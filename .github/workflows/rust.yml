@@ -1,18 +1,20 @@
-name: Build Matrix
+name: Build and Release
 
 on:
   push:
     branches:
       - main
+      - dev
     tags:
       - 'v*.*.*'
   pull_request:
     branches:
       - main
+      - dev
 
 jobs:
   build:
-    name: ${{ matrix.name }}
+    name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.runs_on }}
     continue-on-error: ${{ matrix.allow_failure || false }}
     strategy:
@@ -21,75 +23,163 @@ jobs:
         include:
           - name: linux-x64
             runs_on: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary_name: hephaestus
+            asset_name: hephaestus_linux-x64
           - name: linux-arm64
             runs_on: ubuntu-24.04-arm
-          - name: macos-x64
+            target: aarch64-unknown-linux-gnu
+            binary_name: hephaestus
+            asset_name: hephaestus_linux-arm64
+          - name: macos-intel
             runs_on: macos-13
-          - name: macos-arm64
+            target: x86_64-apple-darwin
+            binary_name: hephaestus
+            asset_name: hephaestus_macos-intel
+          - name: macos-arm
             runs_on: macos-14
+            target: aarch64-apple-darwin
+            binary_name: hephaestus
+            asset_name: hephaestus_macos-arm
           - name: windows-x64
             runs_on: windows-latest
-          # Attempt cross-compile for Windows ARM64 (may lack toolchain)
-          - name: windows-arm64-cross
+            target: x86_64-pc-windows-msvc
+            binary_name: hephaestus.exe
+            asset_name: hephaestus_windows-x64.exe
+          - name: windows-arm64
             runs_on: windows-latest
             target: aarch64-pc-windows-msvc
+            binary_name: hephaestus.exe
+            asset_name: hephaestus_windows-arm64.exe
             allow_failure: true
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Rust (stable)
+      - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
+          targets: ${{ matrix.target }}
           components: clippy,rustfmt
 
-      - name: Add target (if cross-compiling)
-        if: ${{ matrix.target }}
-        run: rustup target add ${{ matrix.target }}
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu' && runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
 
       - name: Build
-        run: |
-          if [ -n "${{ matrix.target }}" ]; then
-            cargo build --release --target ${{ matrix.target }}
-          else
-            cargo build --release
-          fi
-        shell: bash
+        run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Test (native only)
-        if: ${{ !matrix.target }}
-        run: cargo test --all
+      - name: Run tests (native only)
+        if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'x86_64-apple-darwin' || matrix.target == 'x86_64-pc-windows-msvc'
+        run: cargo test --target ${{ matrix.target }}
+
+      - name: Run clippy (native only)
+        if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'x86_64-apple-darwin' || matrix.target == 'x86_64-pc-windows-msvc'
+        run: cargo clippy --target ${{ matrix.target }} -- -D warnings
+
+      - name: Prepare binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} dist/${{ matrix.asset_name }}
+          chmod +x dist/${{ matrix.asset_name }}
+
+      - name: Prepare binary (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          New-Item -ItemType Directory -Force -Path dist
+          Copy-Item target\${{ matrix.target }}\release\${{ matrix.binary_name }} dist\${{ matrix.asset_name }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hephaestus-${{ matrix.name }}
-          path: |
-            target/**/release/hephaestus*
+          name: ${{ matrix.asset_name }}
+          path: dist/${{ matrix.asset_name }}
+          if-no-files-found: error
 
   release:
     name: Create GitHub Release
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Download all build artifacts
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: hephaestus-*
-          merge-multiple: true
-          path: dist
+          path: artifacts
 
-      - name: List artifacts
-        run: ls -R dist
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          ls -lh release/
+
+      - name: Create checksums
+        run: |
+          cd release
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist/**
+          files: release/*
           draft: false
           prerelease: false
+          generate_release_notes: true
+          name: Release v${{ steps.version.outputs.VERSION }}
+          body: |
+            ## Hephaestus v${{ steps.version.outputs.VERSION }}
+
+            ### Downloads
+            Download the appropriate binary for your platform:
+            - **Linux x64**: `hephaestus_linux-x64`
+            - **Linux ARM64**: `hephaestus_linux-arm64`
+            - **macOS Intel**: `hephaestus_macos-intel`
+            - **macOS Apple Silicon**: `hephaestus_macos-arm`
+            - **Windows x64**: `hephaestus_windows-x64.exe`
+            - **Windows ARM64**: `hephaestus_windows-arm64.exe`
+
+            ### Installation
+            1. Download the binary for your platform
+            2. Make it executable (Unix/macOS): `chmod +x hephaestus_*`
+            3. Move to PATH: `sudo mv hephaestus_* /usr/local/bin/hephaestus`
+            4. Verify: `hephaestus --version`
+
+            ### Checksums
+            See `SHA256SUMS` for file integrity verification.
+
+            ### What's Changed
+            See CHANGELOG.md for detailed changes.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
