@@ -1,4 +1,5 @@
 use clap::{Arg, ArgAction, Command};
+use rayon::prelude::*;
 use regex::Regex;
 use std::fs;
 use std::io::{self, Write};
@@ -7,7 +8,7 @@ use std::process::Command as SysCommand;
 
 fn main() {
     let matches = Command::new("Hephaestus")
-        .version("3.1.0")
+        .version("3.2.0")
         .author("Hephaestus Team <gilles.infosec@gmail.com>")
         .about("Secure, cross-platform git helper CLI")
         .subcommand(
@@ -27,18 +28,40 @@ fn main() {
                         .long("all")
                         .help("If set, iterate all first-level subdirectories and update each git repo")
                         .action(ArgAction::SetTrue),
+                )
+                .arg(
+                    Arg::new("parallel")
+                        .long("parallel")
+                        .help("Execute updates in parallel (use with --all)")
+                        .action(ArgAction::SetTrue),
                 ),
         )
         .subcommand(
-            Command::new("clone-links")
-                .about("Clone repositories from a newline-separated links file")
+            Command::new("clone")
+                .about("Clone repositories from a links file or HTML file")
                 .arg(
                     Arg::new("links")
                         .short('l')
                         .long("links")
                         .value_name("FILE")
                         .help("Path to file containing repo URLs (one per line)")
-                        .required(true),
+                        .conflicts_with("input"),
+                )
+                .arg(
+                    Arg::new("input")
+                        .short('i')
+                        .long("input")
+                        .value_name("FILE")
+                        .help("Input HTML file to parse for repo URLs")
+                        .conflicts_with("links"),
+                )
+                .arg(
+                    Arg::new("output")
+                        .short('o')
+                        .long("output")
+                        .value_name("FILE")
+                        .help("Optional output file to write extracted links (use with --input)")
+                        .requires("input"),
                 )
                 .arg(
                     Arg::new("dest")
@@ -48,25 +71,12 @@ fn main() {
                         .help("Destination directory for clones")
                         .required(false)
                         .default_value("."),
-                ),
-        )
-        .subcommand(
-            Command::new("parse-html")
-                .about("Extract repository links from an HTML file")
-                .arg(
-                    Arg::new("input")
-                        .short('i')
-                        .long("input")
-                        .value_name("FILE")
-                        .help("Input HTML file to scan for repo URLs")
-                        .required(true),
                 )
                 .arg(
-                    Arg::new("output")
-                        .short('o')
-                        .long("output")
-                        .value_name("FILE")
-                        .help("Optional output file to write found links"),
+                    Arg::new("parallel")
+                        .long("parallel")
+                        .help("Execute clones in parallel")
+                        .action(ArgAction::SetTrue),
                 ),
         )
         .subcommand(
@@ -108,7 +118,7 @@ fn main() {
                 ),
         )
         .subcommand(
-            Command::new("commit-push")
+            Command::new("push")
                 .about("Stage all changes, commit with a message, and push to the current branch's upstream")
                 .arg(
                     Arg::new("message")
@@ -133,21 +143,28 @@ fn main() {
         Some(("update", sub_m)) => {
             let path = sub_m.get_one::<String>("path").unwrap();
             let all = sub_m.get_flag("all");
+            let parallel = sub_m.get_flag("parallel");
             if all {
-                update_all(Path::new(path));
+                update_all(Path::new(path), parallel);
             } else {
                 git_update(Path::new(path));
             }
         }
-        Some(("clone-links", sub_m)) => {
-            let links = sub_m.get_one::<String>("links").unwrap();
+        Some(("clone", sub_m)) => {
             let dest = sub_m.get_one::<String>("dest").unwrap();
-            clone_from_links(Path::new(links), Path::new(dest));
-        }
-        Some(("parse-html", sub_m)) => {
-            let input = sub_m.get_one::<String>("input").unwrap();
-            let output = sub_m.get_one::<String>("output");
-            git_parse(input, output.map(|s| s.as_str()));
+            let parallel = sub_m.get_flag("parallel");
+
+            // Handle HTML parsing or direct links file
+            if let Some(input) = sub_m.get_one::<String>("input") {
+                // Parse HTML file
+                let output = sub_m.get_one::<String>("output");
+                clone_from_html(input, output.map(|s| s.as_str()), Path::new(dest), parallel);
+            } else if let Some(links) = sub_m.get_one::<String>("links") {
+                // Clone from links file
+                clone_from_links(Path::new(links), Path::new(dest), parallel);
+            } else {
+                eprintln!("Error: Either --links or --input must be provided");
+            }
         }
         Some(("init", sub_m)) => {
             let name = sub_m.get_one::<String>("name").unwrap();
@@ -163,7 +180,7 @@ fn main() {
             let yes = sub_m.get_flag("yes");
             git_rollback(to, yes).ok();
         }
-        Some(("commit-push", sub_m)) => {
+        Some(("push", sub_m)) => {
             let msg = sub_m.get_one::<String>("message").unwrap();
             let path = sub_m.get_one::<String>("path").unwrap();
             commit_and_push(Path::new(path), msg);
@@ -234,37 +251,22 @@ fn git_update(path: &Path) {
 }
 
 /// Updates all first-level child directories that are git repos
-fn update_all(root: &Path) {
+fn update_all(root: &Path, parallel: bool) {
     if let Ok(entries) = fs::read_dir(root) {
-        for e in entries.flatten() {
-            let p = e.path();
-            if p.is_dir() && p.join(".git").exists() {
+        let paths: Vec<PathBuf> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.is_dir() && p.join(".git").exists())
+            .collect();
+
+        if parallel {
+            paths.par_iter().for_each(|p| {
+                git_update(p);
+            });
+        } else {
+            for p in paths {
                 git_update(&p);
             }
-        }
-    }
-}
-
-/// Parses HTML file and extracts repo URLs, optionally writing to a file
-fn git_parse(input: &str, output: Option<&str>) {
-    let contents = match fs::read_to_string(input) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("Failed to read {}: {}", input, e);
-            return;
-        }
-    };
-    let links = extract_repo_links(&contents);
-
-    if let Some(out) = output {
-        if let Err(e) = fs::write(out, links.join("\n") + "\n") {
-            eprintln!("Failed to write {}: {}", out, e);
-            return;
-        }
-        println!("Written {} links to {}", links.len(), out);
-    } else {
-        for l in &links {
-            println!("{}", l);
         }
     }
 }
@@ -374,8 +376,37 @@ fn commit_and_push(path: &Path, message: &str) {
     }
 }
 
+/// Clone repositories from an HTML file (parse then clone)
+fn clone_from_html(input: &str, output: Option<&str>, dest: &Path, parallel: bool) {
+    let contents = match fs::read_to_string(input) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Failed to read {}: {}", input, e);
+            return;
+        }
+    };
+    let links = extract_repo_links(&contents);
+
+    if links.is_empty() {
+        println!("No repository links found in HTML file");
+        return;
+    }
+
+    // Optionally write links to output file
+    if let Some(out) = output {
+        if let Err(e) = fs::write(out, links.join("\n") + "\n") {
+            eprintln!("Failed to write {}: {}", out, e);
+            return;
+        }
+        println!("Written {} links to {}", links.len(), out);
+    }
+
+    println!("Found {} repositories to clone", links.len());
+    clone_repos(&links, dest, parallel);
+}
+
 /// Clone all repos listed in a file to a destination directory
-fn clone_from_links(links_file: &Path, dest: &Path) {
+fn clone_from_links(links_file: &Path, dest: &Path, parallel: bool) {
     let content = match fs::read_to_string(links_file) {
         Ok(c) => c,
         Err(e) => {
@@ -383,27 +414,55 @@ fn clone_from_links(links_file: &Path, dest: &Path) {
             return;
         }
     };
+
+    let urls = parse_links_from_content(&content);
+    clone_repos(&urls, dest, parallel);
+}
+
+/// Helper function to parse and validate URLs from content
+fn parse_links_from_content(content: &str) -> Vec<String> {
     let re = Regex::new(r#"^(https://|git@)[^\s]+$"#).unwrap();
-    for line in content.lines() {
-        let url = line.trim();
-        if url.is_empty() || url.starts_with('#') {
-            continue;
+    content
+        .lines()
+        .map(|line| line.trim())
+        .filter(|url| !url.is_empty() && !url.starts_with('#'))
+        .filter(|url| {
+            if re.is_match(url) {
+                true
+            } else {
+                eprintln!("Skipping invalid URL: {}", url);
+                false
+            }
+        })
+        .map(|s| s.to_string())
+        .collect()
+}
+
+/// Helper function to clone repositories sequentially or in parallel
+fn clone_repos(urls: &[String], dest: &Path, parallel: bool) {
+    if parallel {
+        urls.par_iter().for_each(|url| {
+            clone_single_repo(url, dest);
+        });
+    } else {
+        for url in urls {
+            clone_single_repo(url, dest);
         }
-        if !re.is_match(url) {
-            eprintln!("Skipping invalid URL: {}", url);
-            continue;
-        }
-        let name = repo_name_from_url(url);
-        let target = dest.join(&name);
-        if target.exists() {
-            println!("Skipping existing: {}", target.display());
-            continue;
-        }
-        println!("Cloning {} -> {}", url, target.display());
-        let (_o, e, ok) = run_git(&["clone", url, target.to_str().unwrap()]);
-        if !ok {
-            eprintln!("clone failed: {}", e);
-        }
+    }
+}
+
+/// Clone a single repository
+fn clone_single_repo(url: &str, dest: &Path) {
+    let name = repo_name_from_url(url);
+    let target = dest.join(&name);
+    if target.exists() {
+        println!("Skipping existing: {}", target.display());
+        return;
+    }
+    println!("Cloning {} -> {}", url, target.display());
+    let (_o, e, ok) = run_git(&["clone", url, target.to_str().unwrap()]);
+    if !ok {
+        eprintln!("clone failed: {}", e);
     }
 }
 
