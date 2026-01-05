@@ -7,8 +7,12 @@ Hephaestus is a secure, Rust-based CLI for everyday Git operations at scale. It 
 
 ## Features
 
-- **update**: Fast‑forward update a repo or all child repos (supports `--parallel` for concurrent updates)
-- **clone**: Clone repositories from a links file or extract from HTML (supports `--parallel` for concurrent clones)
+- **update**: Fast‑forward update a repo or all child repos
+  - `--parallel` for concurrent updates
+  - `--timeout` to prevent hanging (default: 300s)
+- **clone**: Clone repositories from a links file or extract from HTML
+  - `--parallel` for concurrent clones
+  - `--timeout` to prevent hanging (default: 600s)
 - **init**: Initialize a repo with README and initial commit
 - **status**: Show `git status` for current repo
 - **rollback**: Confirmed, destructive reset to a ref (default `HEAD~1`)
@@ -103,14 +107,14 @@ hephaestus update --path /path/to/repo
 # Update all child repos (sequential)
 hephaestus update --all --path /path/with/many/repos
 
-# Update all child repos in parallel
-hephaestus update --all --parallel --path /path/with/many/repos
+# Update all child repos in parallel with custom timeout
+hephaestus update --all --parallel --path /path/with/many/repos --timeout 600
 
 # Clone from a links file
 hephaestus clone --links legacy/rsc/GitLinks-Active.txt --dest ./workspace
 
-# Clone from a links file in parallel
-hephaestus clone --links legacy/rsc/GitLinks-Active.txt --dest ./workspace --parallel
+# Clone from a links file in parallel with custom timeout
+hephaestus clone --links legacy/rsc/GitLinks-Active.txt --dest ./workspace --parallel --timeout 900
 
 # Clone from HTML file (parse and clone)
 hephaestus clone --input page.html --dest ./workspace

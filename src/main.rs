@@ -4,11 +4,13 @@ use regex::Regex;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command as SysCommand;
+use std::process::{Command as SysCommand, Stdio};
+use std::time::Duration;
+use wait_timeout::ChildExt;
 
 fn main() {
     let matches = Command::new("Hephaestus")
-        .version("3.2.0")
+        .version("3.2.1")
         .author("Hephaestus Team <gilles.infosec@gmail.com>")
         .about("Secure, cross-platform git helper CLI")
         .subcommand(
@@ -34,6 +36,14 @@ fn main() {
                         .long("parallel")
                         .help("Execute updates in parallel (use with --all)")
                         .action(ArgAction::SetTrue),
+                )
+                .arg(
+                    Arg::new("timeout")
+                        .short('t')
+                        .long("timeout")
+                        .value_name("SECONDS")
+                        .help("Timeout for git operations in seconds (default: 300)")
+                        .default_value("300"),
                 ),
         )
         .subcommand(
@@ -77,6 +87,14 @@ fn main() {
                         .long("parallel")
                         .help("Execute clones in parallel")
                         .action(ArgAction::SetTrue),
+                )
+                .arg(
+                    Arg::new("timeout")
+                        .short('t')
+                        .long("timeout")
+                        .value_name("SECONDS")
+                        .help("Timeout for git clone operations in seconds (default: 600)")
+                        .default_value("600"),
                 ),
         )
         .subcommand(
@@ -144,24 +162,26 @@ fn main() {
             let path = sub_m.get_one::<String>("path").unwrap();
             let all = sub_m.get_flag("all");
             let parallel = sub_m.get_flag("parallel");
+            let timeout: u64 = sub_m.get_one::<String>("timeout").unwrap().parse().unwrap_or(300);
             if all {
-                update_all(Path::new(path), parallel);
+                update_all(Path::new(path), parallel, Some(timeout));
             } else {
-                git_update(Path::new(path));
+                git_update(Path::new(path), Some(timeout));
             }
         }
         Some(("clone", sub_m)) => {
             let dest = sub_m.get_one::<String>("dest").unwrap();
             let parallel = sub_m.get_flag("parallel");
+            let timeout: u64 = sub_m.get_one::<String>("timeout").unwrap().parse().unwrap_or(600);
 
             // Handle HTML parsing or direct links file
             if let Some(input) = sub_m.get_one::<String>("input") {
                 // Parse HTML file
                 let output = sub_m.get_one::<String>("output");
-                clone_from_html(input, output.map(|s| s.as_str()), Path::new(dest), parallel);
+                clone_from_html(input, output.map(|s| s.as_str()), Path::new(dest), parallel, Some(timeout));
             } else if let Some(links) = sub_m.get_one::<String>("links") {
                 // Clone from links file
-                clone_from_links(Path::new(links), Path::new(dest), parallel);
+                clone_from_links(Path::new(links), Path::new(dest), parallel, Some(timeout));
             } else {
                 eprintln!("Error: Either --links or --input must be provided");
             }
@@ -191,21 +211,61 @@ fn main() {
     }
 }
 
-/// Run a git command, returning (stdout, stderr, success)
-fn run_git(args: &[&str]) -> (String, String, bool) {
-    let output = SysCommand::new("git").args(args).output();
-    match output {
-        Ok(o) => (
-            String::from_utf8_lossy(&o.stdout).to_string(),
-            String::from_utf8_lossy(&o.stderr).to_string(),
-            o.status.success(),
-        ),
-        Err(e) => (String::new(), e.to_string(), false),
+/// Run a git command with optional timeout, returning (stdout, stderr, success)
+/// Default timeout is None (no timeout). Timeout in seconds.
+fn run_git(args: &[&str], timeout_secs: Option<u64>) -> (String, String, bool) {
+    // Apply timeout if specified
+    if let Some(timeout) = timeout_secs {
+        let mut child = match SysCommand::new("git")
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(e) => return (String::new(), format!("Failed to spawn git: {}", e), false),
+        };
+
+        match child.wait_timeout(Duration::from_secs(timeout)) {
+            Ok(Some(_status)) => {
+                // Process finished in time, get output
+                match child.wait_with_output() {
+                    Ok(output) => (
+                        String::from_utf8_lossy(&output.stdout).to_string(),
+                        String::from_utf8_lossy(&output.stderr).to_string(),
+                        output.status.success(),
+                    ),
+                    Err(e) => (String::new(), format!("Error reading git output: {}", e), false),
+                }
+            }
+            Ok(None) => {
+                // Timeout occurred, kill the process
+                let _ = child.kill();
+                let _ = child.wait();
+                (
+                    String::new(),
+                    format!("Git command timed out after {} seconds", timeout),
+                    false,
+                )
+            }
+            Err(e) => (String::new(), format!("Error waiting for git: {}", e), false),
+        }
+    } else {
+        // No timeout, use the original simple approach
+        let output = SysCommand::new("git").args(args).output();
+        match output {
+            Ok(o) => (
+                String::from_utf8_lossy(&o.stdout).to_string(),
+                String::from_utf8_lossy(&o.stderr).to_string(),
+                o.status.success(),
+            ),
+            Err(e) => (String::new(), e.to_string(), false),
+        }
     }
 }
 
 /// Updates a single repository safely (fetch + ff-only merge)
-fn git_update(path: &Path) {
+fn git_update(path: &Path, timeout: Option<u64>) {
     println!("Updating repo at {}", path.display());
     if !path.join(".git").exists() {
         eprintln!("Skipping: not a git repo");
@@ -218,7 +278,7 @@ fn git_update(path: &Path) {
         "--all",
         "--tags",
         "--prune",
-    ]);
+    ], timeout);
     if !ok1 {
         eprintln!("fetch failed: {}", e1);
         return;
@@ -229,7 +289,7 @@ fn git_update(path: &Path) {
         "rev-parse",
         "--abbrev-ref",
         "@",
-    ]);
+    ], None); // Quick operation, no timeout needed
     if !okb {
         eprintln!("cannot detect current branch");
         return;
@@ -242,7 +302,7 @@ fn git_update(path: &Path) {
         "merge",
         "--ff-only",
         &upstream,
-    ]);
+    ], timeout);
     if !ok2 {
         eprintln!("fast-forward merge failed (maybe no upstream?): {}", e2);
     } else {
@@ -251,7 +311,7 @@ fn git_update(path: &Path) {
 }
 
 /// Updates all first-level child directories that are git repos
-fn update_all(root: &Path, parallel: bool) {
+fn update_all(root: &Path, parallel: bool, timeout: Option<u64>) {
     if let Ok(entries) = fs::read_dir(root) {
         let paths: Vec<PathBuf> = entries
             .flatten()
@@ -261,11 +321,11 @@ fn update_all(root: &Path, parallel: bool) {
 
         if parallel {
             paths.par_iter().for_each(|p| {
-                git_update(p);
+                git_update(p, timeout);
             });
         } else {
             for p in paths {
-                git_update(&p);
+                git_update(&p, timeout);
             }
         }
     }
@@ -278,7 +338,7 @@ fn git_init(name: &str, readme: &str) {
         eprintln!("Failed to create {}: {}", dir.display(), e);
         return;
     }
-    let (o, e, ok) = run_git(&["init", dir.to_str().unwrap()]);
+    let (o, e, ok) = run_git(&["init", dir.to_str().unwrap()], None);
     if !ok {
         eprintln!("git init failed: {} {}", o, e);
         return;
@@ -289,8 +349,8 @@ fn git_init(name: &str, readme: &str) {
         return;
     }
     let repo = dir.to_str().unwrap();
-    run_git(&["-C", repo, "add", "."]);
-    let (_o2, e2, ok2) = run_git(&["-C", repo, "commit", "-m", "Initial commit"]);
+    run_git(&["-C", repo, "add", "."], None);
+    let (_o2, e2, ok2) = run_git(&["-C", repo, "commit", "-m", "Initial commit"], None);
     if !ok2 {
         eprintln!("commit failed: {}", e2);
         return;
@@ -299,7 +359,7 @@ fn git_init(name: &str, readme: &str) {
 }
 
 fn git_status(path: &str) {
-    let (o, e, ok) = run_git(&["-C", path, "status"]);
+    let (o, e, ok) = run_git(&["-C", path, "status"], None);
     if ok {
         println!("{}", o);
     } else {
@@ -322,7 +382,7 @@ fn git_rollback(to: &str, yes: bool) -> io::Result<()> {
             return Ok(());
         }
     }
-    let (_o, e, ok) = run_git(&["reset", "--hard", to]);
+    let (_o, e, ok) = run_git(&["reset", "--hard", to], None);
     if ok {
         println!("Reset to {}", to);
     } else {
@@ -338,17 +398,17 @@ fn commit_and_push(path: &Path, message: &str) {
         return;
     }
     let repo = path.to_str().unwrap();
-    let (_o1, e1, ok1) = run_git(&["-C", repo, "add", "-A"]);
+    let (_o1, e1, ok1) = run_git(&["-C", repo, "add", "-A"], None);
     if !ok1 {
         eprintln!("git add failed: {}", e1);
         return;
     }
-    let (_o2, e2, ok2) = run_git(&["-C", repo, "commit", "-m", message]);
+    let (_o2, e2, ok2) = run_git(&["-C", repo, "commit", "-m", message], None);
     if !ok2 {
         eprintln!("git commit failed (maybe no changes?): {}", e2);
         // continue to push anyway, it's harmless if nothing to push
     }
-    let (branch, _e3, ok3) = run_git(&["-C", repo, "rev-parse", "--abbrev-ref", "@"]);
+    let (branch, _e3, ok3) = run_git(&["-C", repo, "rev-parse", "--abbrev-ref", "@"], None);
     if !ok3 {
         eprintln!("cannot determine current branch");
         return;
@@ -362,13 +422,13 @@ fn commit_and_push(path: &Path, message: &str) {
         "--abbrev-ref",
         "--symbolic-full-name",
         "@{u}",
-    ]);
+    ], None);
     let push_args: Vec<&str> = if ok4 {
         vec!["-C", repo, "push"]
     } else {
         vec!["-C", repo, "push", "-u", "origin", branch]
     };
-    let (_o5, e5, ok5) = run_git(&push_args);
+    let (_o5, e5, ok5) = run_git(&push_args, Some(300)); // 5 minute timeout for push
     if !ok5 {
         eprintln!("git push failed: {}", e5);
     } else {
@@ -377,7 +437,7 @@ fn commit_and_push(path: &Path, message: &str) {
 }
 
 /// Clone repositories from an HTML file (parse then clone)
-fn clone_from_html(input: &str, output: Option<&str>, dest: &Path, parallel: bool) {
+fn clone_from_html(input: &str, output: Option<&str>, dest: &Path, parallel: bool, timeout: Option<u64>) {
     let contents = match fs::read_to_string(input) {
         Ok(c) => c,
         Err(e) => {
@@ -402,11 +462,11 @@ fn clone_from_html(input: &str, output: Option<&str>, dest: &Path, parallel: boo
     }
 
     println!("Found {} repositories to clone", links.len());
-    clone_repos(&links, dest, parallel);
+    clone_repos(&links, dest, parallel, timeout);
 }
 
 /// Clone all repos listed in a file to a destination directory
-fn clone_from_links(links_file: &Path, dest: &Path, parallel: bool) {
+fn clone_from_links(links_file: &Path, dest: &Path, parallel: bool, timeout: Option<u64>) {
     let content = match fs::read_to_string(links_file) {
         Ok(c) => c,
         Err(e) => {
@@ -416,7 +476,7 @@ fn clone_from_links(links_file: &Path, dest: &Path, parallel: bool) {
     };
 
     let urls = parse_links_from_content(&content);
-    clone_repos(&urls, dest, parallel);
+    clone_repos(&urls, dest, parallel, timeout);
 }
 
 /// Helper function to parse and validate URLs from content
@@ -439,20 +499,20 @@ fn parse_links_from_content(content: &str) -> Vec<String> {
 }
 
 /// Helper function to clone repositories sequentially or in parallel
-fn clone_repos(urls: &[String], dest: &Path, parallel: bool) {
+fn clone_repos(urls: &[String], dest: &Path, parallel: bool, timeout: Option<u64>) {
     if parallel {
         urls.par_iter().for_each(|url| {
-            clone_single_repo(url, dest);
+            clone_single_repo(url, dest, timeout);
         });
     } else {
         for url in urls {
-            clone_single_repo(url, dest);
+            clone_single_repo(url, dest, timeout);
         }
     }
 }
 
 /// Clone a single repository
-fn clone_single_repo(url: &str, dest: &Path) {
+fn clone_single_repo(url: &str, dest: &Path, timeout: Option<u64>) {
     let name = repo_name_from_url(url);
     let target = dest.join(&name);
     if target.exists() {
@@ -460,7 +520,7 @@ fn clone_single_repo(url: &str, dest: &Path) {
         return;
     }
     println!("Cloning {} -> {}", url, target.display());
-    let (_o, e, ok) = run_git(&["clone", url, target.to_str().unwrap()]);
+    let (_o, e, ok) = run_git(&["clone", url, target.to_str().unwrap()], timeout);
     if !ok {
         eprintln!("clone failed: {}", e);
     }
