@@ -9,7 +9,7 @@ Hephaestus is a secure, Rust-based CLI for everyday Git operations at scale. It 
 
 - **update**: Fast‑forward update a repo or all child repos
   - `--parallel` for concurrent updates
-  - `--timeout` to prevent hanging (default: 300s)
+  - `--timeout` to prevent hanging (default: 300s per repo)
 - **clone**: Clone repositories from a links file or extract from HTML
   - `--parallel` for concurrent clones
   - `--timeout` to prevent hanging (default: 600s)
@@ -139,6 +139,15 @@ For more options, use the help flag:
 
 ```bash
 hephaestus --help
+```
+
+### Timeout behavior
+
+- `update --all --timeout N` gives each repository one total timeout budget.
+- Fetch, branch detection, and fast-forward merge all draw from that same per-repo budget.
+- Parallel updates keep the same rule: each repository gets its own independent budget.
+- Git commands run non-interactively, so authentication prompts fail instead of waiting forever.
+- On Unix/macOS, timeout cleanup terminates the full git subprocess group, including spawned SSH or credential-helper children.
 
 ## Legacy scripts mapping
 
@@ -153,7 +162,6 @@ Security improvements:
 - No writes to privileged paths (e.g., `/opt`) without user choice
 - No global git config changes; only repository‑local changes
 - Destructive operations require an explicit `--yes`
-```
 
 ## CI
 

@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.2] - 2026-05-27
+
+### Changed
+- `update --all --timeout N` now uses one timeout budget per repository instead of applying the full timeout separately to each update step.
+- Fetch, branch detection, and fast-forward merge now all share the same per-repo timeout budget.
+- Git subprocesses now run non-interactively with null stdin and `GIT_TERMINAL_PROMPT=0`.
+- Timeout messages now include the repo path, git operation, and per-repo budget context.
+
+### Fixed
+- Timeout cleanup on Unix/macOS now kills the full git subprocess group, including spawned SSH or credential-helper children.
+- Branch detection during update is now covered by the timeout budget so no update step can hang indefinitely.
+
+### Added
+- Timeout budget unit tests and fake-git integration tests for shared budget behavior and subprocess cleanup.
+
 ## [3.2.1] - 2026-01-05
 
 ### Added

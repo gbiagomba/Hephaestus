@@ -5,12 +5,15 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command as SysCommand, Stdio};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use wait_timeout::ChildExt;
+
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 
 fn main() {
     let matches = Command::new("Hephaestus")
-        .version("3.2.1")
+        .version("3.2.2")
         .author("Hephaestus Team <gilles.infosec@gmail.com>")
         .about("Secure, cross-platform git helper CLI")
         .subcommand(
@@ -162,7 +165,11 @@ fn main() {
             let path = sub_m.get_one::<String>("path").unwrap();
             let all = sub_m.get_flag("all");
             let parallel = sub_m.get_flag("parallel");
-            let timeout: u64 = sub_m.get_one::<String>("timeout").unwrap().parse().unwrap_or(300);
+            let timeout: u64 = sub_m
+                .get_one::<String>("timeout")
+                .unwrap()
+                .parse()
+                .unwrap_or(300);
             if all {
                 update_all(Path::new(path), parallel, Some(timeout));
             } else {
@@ -172,13 +179,23 @@ fn main() {
         Some(("clone", sub_m)) => {
             let dest = sub_m.get_one::<String>("dest").unwrap();
             let parallel = sub_m.get_flag("parallel");
-            let timeout: u64 = sub_m.get_one::<String>("timeout").unwrap().parse().unwrap_or(600);
+            let timeout: u64 = sub_m
+                .get_one::<String>("timeout")
+                .unwrap()
+                .parse()
+                .unwrap_or(600);
 
             // Handle HTML parsing or direct links file
             if let Some(input) = sub_m.get_one::<String>("input") {
                 // Parse HTML file
                 let output = sub_m.get_one::<String>("output");
-                clone_from_html(input, output.map(|s| s.as_str()), Path::new(dest), parallel, Some(timeout));
+                clone_from_html(
+                    input,
+                    output.map(|s| s.as_str()),
+                    Path::new(dest),
+                    parallel,
+                    Some(timeout),
+                );
             } else if let Some(links) = sub_m.get_one::<String>("links") {
                 // Clone from links file
                 clone_from_links(Path::new(links), Path::new(dest), parallel, Some(timeout));
@@ -211,57 +228,253 @@ fn main() {
     }
 }
 
-/// Run a git command with optional timeout, returning (stdout, stderr, success)
-/// Default timeout is None (no timeout). Timeout in seconds.
-fn run_git(args: &[&str], timeout_secs: Option<u64>) -> (String, String, bool) {
-    // Apply timeout if specified
-    if let Some(timeout) = timeout_secs {
-        let mut child = match SysCommand::new("git")
-            .args(args)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-        {
-            Ok(c) => c,
-            Err(e) => return (String::new(), format!("Failed to spawn git: {}", e), false),
-        };
+#[derive(Debug)]
+struct GitRunResult {
+    stdout: String,
+    stderr: String,
+    success: bool,
+}
 
-        match child.wait_timeout(Duration::from_secs(timeout)) {
-            Ok(Some(_status)) => {
-                // Process finished in time, get output
-                match child.wait_with_output() {
-                    Ok(output) => (
-                        String::from_utf8_lossy(&output.stdout).to_string(),
-                        String::from_utf8_lossy(&output.stderr).to_string(),
-                        output.status.success(),
-                    ),
-                    Err(e) => (String::new(), format!("Error reading git output: {}", e), false),
-                }
-            }
-            Ok(None) => {
-                // Timeout occurred, kill the process
-                let _ = child.kill();
-                let _ = child.wait();
-                (
-                    String::new(),
-                    format!("Git command timed out after {} seconds", timeout),
-                    false,
-                )
-            }
-            Err(e) => (String::new(), format!("Error waiting for git: {}", e), false),
-        }
-    } else {
-        // No timeout, use the original simple approach
-        let output = SysCommand::new("git").args(args).output();
-        match output {
-            Ok(o) => (
-                String::from_utf8_lossy(&o.stdout).to_string(),
-                String::from_utf8_lossy(&o.stderr).to_string(),
-                o.status.success(),
-            ),
-            Err(e) => (String::new(), e.to_string(), false),
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BudgetState {
+    Unlimited,
+    Remaining(Duration),
+    Expired,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct RepoTimeoutBudget {
+    total: Option<Duration>,
+    deadline: Option<Instant>,
+}
+
+impl RepoTimeoutBudget {
+    fn new(timeout_secs: Option<u64>) -> Self {
+        let total = timeout_secs.map(Duration::from_secs);
+        Self {
+            total,
+            deadline: total.map(|duration| Instant::now() + duration),
         }
     }
+
+    #[cfg(test)]
+    fn with_deadline(total: Duration, deadline: Instant) -> Self {
+        Self {
+            total: Some(total),
+            deadline: Some(deadline),
+        }
+    }
+
+    fn state(&self) -> BudgetState {
+        match self.deadline {
+            None => BudgetState::Unlimited,
+            Some(deadline) => deadline
+                .checked_duration_since(Instant::now())
+                .filter(|remaining| !remaining.is_zero())
+                .map(BudgetState::Remaining)
+                .unwrap_or(BudgetState::Expired),
+        }
+    }
+}
+
+/// Run a git command with optional timeout, returning (stdout, stderr, success).
+/// Default timeout is None (no timeout). Timeout is in seconds.
+fn run_git(args: &[&str], timeout_secs: Option<u64>) -> (String, String, bool) {
+    let result = run_git_with_limit(
+        args,
+        timeout_secs.map(Duration::from_secs),
+        None,
+        infer_git_operation(args),
+        None,
+        false,
+    );
+    (result.stdout, result.stderr, result.success)
+}
+
+fn run_git_with_budget(
+    args: &[&str],
+    budget: &RepoTimeoutBudget,
+    repo_path: &Path,
+    operation: &str,
+) -> GitRunResult {
+    match budget.state() {
+        BudgetState::Unlimited => {
+            run_git_with_limit(args, None, Some(repo_path), operation, None, false)
+        }
+        BudgetState::Remaining(remaining) => run_git_with_limit(
+            args,
+            Some(remaining),
+            Some(repo_path),
+            operation,
+            budget.total,
+            false,
+        ),
+        BudgetState::Expired => GitRunResult {
+            stdout: String::new(),
+            stderr: timeout_message(
+                Some(repo_path),
+                operation,
+                Duration::ZERO,
+                budget.total,
+                true,
+            ),
+            success: false,
+        },
+    }
+}
+
+fn run_git_with_limit(
+    args: &[&str],
+    timeout: Option<Duration>,
+    repo_path: Option<&Path>,
+    operation: &str,
+    repo_budget: Option<Duration>,
+    budget_expired: bool,
+) -> GitRunResult {
+    let mut command = SysCommand::new("git");
+    command
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .env("GIT_TERMINAL_PROMPT", "0");
+
+    #[cfg(unix)]
+    unsafe {
+        command.pre_exec(|| {
+            if libc::setpgid(0, 0) == 0 {
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error())
+            }
+        });
+    }
+
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(e) => {
+            return GitRunResult {
+                stdout: String::new(),
+                stderr: format!("Failed to spawn git: {}", e),
+                success: false,
+            };
+        }
+    };
+
+    if let Some(timeout) = timeout {
+        match child.wait_timeout(timeout) {
+            Ok(Some(_status)) => read_git_output(child),
+            Ok(None) => {
+                kill_git_process_tree(&mut child);
+                let _ = child.wait_with_output();
+                GitRunResult {
+                    stdout: String::new(),
+                    stderr: timeout_message(
+                        repo_path,
+                        operation,
+                        timeout,
+                        repo_budget,
+                        budget_expired,
+                    ),
+                    success: false,
+                }
+            }
+            Err(e) => GitRunResult {
+                stdout: String::new(),
+                stderr: format!("Error waiting for git: {}", e),
+                success: false,
+            },
+        }
+    } else {
+        read_git_output(child)
+    }
+}
+
+fn read_git_output(child: std::process::Child) -> GitRunResult {
+    match child.wait_with_output() {
+        Ok(output) => GitRunResult {
+            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            success: output.status.success(),
+        },
+        Err(e) => GitRunResult {
+            stdout: String::new(),
+            stderr: format!("Error reading git output: {}", e),
+            success: false,
+        },
+    }
+}
+
+fn kill_git_process_tree(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    unsafe {
+        let process_group = -(child.id() as libc::pid_t);
+        if libc::kill(process_group, libc::SIGKILL) == 0 {
+            return;
+        }
+    }
+
+    let _ = child.kill();
+}
+
+fn timeout_message(
+    repo_path: Option<&Path>,
+    operation: &str,
+    timeout: Duration,
+    repo_budget: Option<Duration>,
+    budget_expired: bool,
+) -> String {
+    let repo = repo_path
+        .map(|path| format!(" for {}", path.display()))
+        .unwrap_or_default();
+
+    if let Some(total) = repo_budget {
+        if budget_expired {
+            format!(
+                "git {}{} timed out: per-repo timeout budget expired after {} seconds",
+                operation,
+                repo,
+                total.as_secs()
+            )
+        } else {
+            format!(
+                "git {}{} timed out after {} seconds; per-repo timeout budget is {} seconds",
+                operation,
+                repo,
+                seconds_for_message(timeout),
+                total.as_secs()
+            )
+        }
+    } else {
+        format!(
+            "git {}{} timed out after {} seconds",
+            operation,
+            repo,
+            seconds_for_message(timeout)
+        )
+    }
+}
+
+fn seconds_for_message(duration: Duration) -> u64 {
+    duration.as_secs().max(1)
+}
+
+fn infer_git_operation<'a>(args: &'a [&'a str]) -> &'a str {
+    let mut skip_next = false;
+    for arg in args {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+        if *arg == "-C" {
+            skip_next = true;
+            continue;
+        }
+        if !arg.starts_with('-') {
+            return arg;
+        }
+    }
+    "command"
 }
 
 /// Updates a single repository safely (fetch + ff-only merge)
@@ -271,40 +484,59 @@ fn git_update(path: &Path, timeout: Option<u64>) {
         eprintln!("Skipping: not a git repo");
         return;
     }
-    let (_o, e1, ok1) = run_git(&[
-        "-C",
-        path.to_str().unwrap(),
+    let budget = RepoTimeoutBudget::new(timeout);
+    let fetch = run_git_with_budget(
+        &[
+            "-C",
+            path.to_str().unwrap(),
+            "fetch",
+            "--all",
+            "--tags",
+            "--prune",
+        ],
+        &budget,
+        path,
         "fetch",
-        "--all",
-        "--tags",
-        "--prune",
-    ], timeout);
-    if !ok1 {
-        eprintln!("fetch failed: {}", e1);
+    );
+    if !fetch.success {
+        eprintln!("fetch failed: {}", fetch.stderr);
         return;
     }
-    let (branch, _e, okb) = run_git(&[
-        "-C",
-        path.to_str().unwrap(),
-        "rev-parse",
-        "--abbrev-ref",
-        "@",
-    ], None); // Quick operation, no timeout needed
-    if !okb {
-        eprintln!("cannot detect current branch");
+    let branch_result = run_git_with_budget(
+        &[
+            "-C",
+            path.to_str().unwrap(),
+            "rev-parse",
+            "--abbrev-ref",
+            "@",
+        ],
+        &budget,
+        path,
+        "branch detection",
+    );
+    if !branch_result.success {
+        eprintln!("cannot detect current branch: {}", branch_result.stderr);
         return;
     }
-    let branch = branch.trim();
+    let branch = branch_result.stdout.trim();
     let upstream = format!("{}@{{u}}", branch);
-    let (_o2, e2, ok2) = run_git(&[
-        "-C",
-        path.to_str().unwrap(),
-        "merge",
-        "--ff-only",
-        &upstream,
-    ], timeout);
-    if !ok2 {
-        eprintln!("fast-forward merge failed (maybe no upstream?): {}", e2);
+    let merge = run_git_with_budget(
+        &[
+            "-C",
+            path.to_str().unwrap(),
+            "merge",
+            "--ff-only",
+            &upstream,
+        ],
+        &budget,
+        path,
+        "fast-forward merge",
+    );
+    if !merge.success {
+        eprintln!(
+            "fast-forward merge failed (maybe no upstream?): {}",
+            merge.stderr
+        );
     } else {
         println!("Updated {}", branch);
     }
@@ -415,14 +647,17 @@ fn commit_and_push(path: &Path, message: &str) {
     }
     let branch = branch.trim();
     // Check if upstream is set
-    let (_o4, _e4, ok4) = run_git(&[
-        "-C",
-        repo,
-        "rev-parse",
-        "--abbrev-ref",
-        "--symbolic-full-name",
-        "@{u}",
-    ], None);
+    let (_o4, _e4, ok4) = run_git(
+        &[
+            "-C",
+            repo,
+            "rev-parse",
+            "--abbrev-ref",
+            "--symbolic-full-name",
+            "@{u}",
+        ],
+        None,
+    );
     let push_args: Vec<&str> = if ok4 {
         vec!["-C", repo, "push"]
     } else {
@@ -437,7 +672,13 @@ fn commit_and_push(path: &Path, message: &str) {
 }
 
 /// Clone repositories from an HTML file (parse then clone)
-fn clone_from_html(input: &str, output: Option<&str>, dest: &Path, parallel: bool, timeout: Option<u64>) {
+fn clone_from_html(
+    input: &str,
+    output: Option<&str>,
+    dest: &Path,
+    parallel: bool,
+    timeout: Option<u64>,
+) {
     let contents = match fs::read_to_string(input) {
         Ok(c) => c,
         Err(e) => {
@@ -558,7 +799,8 @@ fn extract_repo_links(contents: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::extract_repo_links;
+    use super::{extract_repo_links, BudgetState, RepoTimeoutBudget};
+    use std::time::{Duration, Instant};
 
     #[test]
     fn extracts_and_dedups_links() {
@@ -579,5 +821,34 @@ mod tests {
                 "https://gitlab.com/group/project".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn repo_timeout_budget_is_unlimited_without_timeout() {
+        let budget = RepoTimeoutBudget::new(None);
+        assert_eq!(BudgetState::Unlimited, budget.state());
+    }
+
+    #[test]
+    fn repo_timeout_budget_reports_remaining_time() {
+        let total = Duration::from_secs(5);
+        let budget = RepoTimeoutBudget::with_deadline(total, Instant::now() + total);
+
+        match budget.state() {
+            BudgetState::Remaining(remaining) => {
+                assert!(remaining <= total);
+                assert!(remaining > Duration::ZERO);
+            }
+            state => panic!("expected remaining budget, got {:?}", state),
+        }
+    }
+
+    #[test]
+    fn repo_timeout_budget_expires_once_deadline_passes() {
+        let total = Duration::from_secs(5);
+        let budget =
+            RepoTimeoutBudget::with_deadline(total, Instant::now() - Duration::from_secs(1));
+
+        assert_eq!(BudgetState::Expired, budget.state());
     }
 }
