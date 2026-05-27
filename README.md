@@ -7,13 +7,16 @@ Hephaestus is a secure, Rust-based CLI for everyday Git operations at scale. It 
 
 ## Features
 
-- update: Fast‑forward update a repo or all child repos
-- clone-links: Clone repositories from a newline‑separated links file
-- parse-html: Extract repo links from HTML into stdout or file
-- init: Initialize a repo with README and initial commit
-- status: Show `git status` for current repo
-- rollback: Confirmed, destructive reset to a ref (default `HEAD~1`)
-- commit-push: Stage all, commit with message, and push to upstream
+- **update**: Fast‑forward update a repo or all child repos
+  - `--parallel` for concurrent updates
+  - `--timeout` to prevent hanging (default: 300s)
+- **clone**: Clone repositories from a links file or extract from HTML
+  - `--parallel` for concurrent clones
+  - `--timeout` to prevent hanging (default: 600s)
+- **init**: Initialize a repo with README and initial commit
+- **status**: Show `git status` for current repo
+- **rollback**: Confirmed, destructive reset to a ref (default `HEAD~1`)
+- **push**: Stage all, commit with message, and push to upstream
 
 ## Installation
 
@@ -23,15 +26,15 @@ Hephaestus is a secure, Rust-based CLI for everyday Git operations at scale. It 
 ```bash
 git clone https://github.com/yourusername/hephaestus.git
 cd hephaestus
-chmod +x install.sh
-./install.sh
+chmod +x scripts/install.sh
+./scripts/install.sh
 ```
 
 **Windows (PowerShell as Administrator):**
 ```powershell
 git clone https://github.com/yourusername/hephaestus.git
 cd hephaestus
-.\install.ps1
+.\scripts\install.ps1
 ```
 
 The install scripts will automatically:
@@ -98,14 +101,38 @@ docker run --rm ghcr.io/yourusername/hephaestus:latest --help
 Common usage:
 
 ```bash
+# Update a single repo
 hephaestus update --path /path/to/repo
+
+# Update all child repos (sequential)
 hephaestus update --all --path /path/with/many/repos
-hephaestus clone-links --links legacy/rsc/GitLinks-Active.txt --dest ./workspace
-hephaestus parse-html --input page.html --output links.txt
+
+# Update all child repos in parallel with custom timeout
+hephaestus update --all --parallel --path /path/with/many/repos --timeout 600
+
+# Clone from a links file
+hephaestus clone --links legacy/rsc/GitLinks-Active.txt --dest ./workspace
+
+# Clone from a links file in parallel with custom timeout
+hephaestus clone --links legacy/rsc/GitLinks-Active.txt --dest ./workspace --parallel --timeout 900
+
+# Clone from HTML file (parse and clone)
+hephaestus clone --input page.html --dest ./workspace
+
+# Clone from HTML and save extracted links
+hephaestus clone --input page.html --output links.txt --dest ./workspace --parallel
+
+# Initialize a new repo
 hephaestus init --name new-repo --readme "# First commit"
+
+# Show status
 hephaestus status
+
+# Rollback to previous commit
 hephaestus rollback --to HEAD~1 --yes
-hephaestus commit-push --message "feat: update" --path .
+
+# Stage, commit, and push
+hephaestus push --message "feat: update" --path .
 ```
 
 For more options, use the help flag:
@@ -115,11 +142,11 @@ hephaestus --help
 
 ## Legacy scripts mapping
 
-- legacy/Git_Mngr.sh → `update` and `clone-links`
-- legacy/GitHTMLParser.sh → `parse-html`
+- legacy/Git_Mngr.sh → `update` and `clone`
+- legacy/GitHTMLParser.sh → `clone --input` (HTML parsing)
 - legacy/Git_Init.sh → `init`
 - legacy/Git_Roleback.sh → `rollback` (safer confirmation)
-- legacy/Git_Updater.sh → `commit-push`
+- legacy/Git_Updater.sh → `push`
 
 Security improvements:
 - No insecure curl calls; all network operations are via `git`

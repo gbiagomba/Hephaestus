@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.1] - 2026-01-05
+
+### Added
+- **Timeout support** for git operations to prevent indefinite hanging
+  - `--timeout` flag for `update` command (default: 300 seconds / 5 minutes)
+  - `--timeout` flag for `clone` command (default: 600 seconds / 10 minutes)
+  - Automatic process termination when timeout is reached
+  - Clear error messages when operations timeout
+- Added `wait-timeout` dependency (v0.2) for timeout functionality
+
+### Changed
+- All git operations now respect timeout settings
+- Push operations in `push` command use 5-minute timeout by default
+- Quick local operations (status, init, rollback) use no timeout
+
+### Fixed
+- Prevents tool from hanging indefinitely on slow networks or large repositories
+- Improves reliability when cloning or updating multiple repositories
+
+## [3.2.0] - 2026-01-05
+
+### Added
+- **Parallel execution support** for `update` and `clone` commands via `--parallel` flag
+  - Sequential execution remains the default for safety
+  - Parallel mode uses Rayon for efficient multi-threading
+- Merged `parse-html` functionality into `clone` command
+  - `clone --input <html-file>` now parses HTML and clones repositories in one step
+  - Optional `--output` flag to save extracted links before cloning
+- Added `rayon` dependency (v1.10) for parallel execution
+
+### Changed
+- **Breaking**: Renamed `clone-links` command to `clone`
+  - Use `--links` flag for links file (previous default behavior)
+  - Use `--input` flag for HTML file parsing (merged from `parse-html`)
+- **Breaking**: Renamed `commit-push` command to `push` for brevity
+- **Breaking**: Removed standalone `parse-html` command (merged into `clone`)
+- Refactored clone functionality into modular helper functions for better maintainability
+- Updated README with new command names and parallel execution examples
+- Updated installation paths to reference `scripts/` directory
+
+### Fixed
+- Removed unused imports (Arc, Mutex) from main.rs
+
 ## [3.1.0] - 2025-12-11
 
 ### Added
